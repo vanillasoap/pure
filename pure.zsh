@@ -53,10 +53,20 @@ prompt_pure_check_cmd_exec_time() {
 	}
 }
 
-# Sets REPLY to the tag shown for a command result: pass, fail, error or fatal.
-prompt_pure_result_symbol() {
-	local -A defaults=(pass '[PASS]' fail '[FAIL]' error '[ERROR]' fatal '[FATAL]')
-	zstyle -s ":prompt:pure:result:$1" symbol REPLY || REPLY=$defaults[$1]
+# Sets REPLY to the symbol for a prompt part, from its zstyle or the default.
+# The defaults are PragmataPro ligature tags, kept as plain ASCII so zsh
+# counts their width correctly.
+prompt_pure_symbol() {
+	local -A defaults=(
+		result:pass    '[PASS]'
+		result:fail    '[FAIL]'
+		result:error   '[ERROR]'
+		result:fatal   '[FATAL]'
+		git:conflicts  '[FIXME]'
+		git:detached   '[WARN]'
+		git:cached     '[WARN]'
+	)
+	zstyle -s ":prompt:pure:$1" symbol REPLY || REPLY=${defaults[$1]-}
 }
 
 # Stores (into psvar[24]) how the last command ended, when enabled. Success
@@ -84,7 +94,7 @@ prompt_pure_check_cmd_result() {
 	esac
 	[[ -n $kind ]] || return 0
 
-	prompt_pure_result_symbol $kind
+	prompt_pure_symbol result:$kind
 	[[ -z $REPLY ]] || psvar[24]=$REPLY${detail:+ $detail}
 }
 
@@ -187,6 +197,36 @@ prompt_pure_render_dimmed_path() {
 	print -n -r -- "%F{${prompt_pure_colors[path]}}${prefix}${current_path//\//$separator}%f"
 }
 
+# Stores (into psvar[16]) the Git state: unresolved conflicts, the action in
+# progress (rebase, merge, bisect), and optionally a detached HEAD or stale
+# cached data. An action can be replaced by a symbol, e.g. [BUG] for bisect.
+prompt_pure_set_git_state() {
+	setopt localoptions noshwordsplit
+	local REPLY action=${prompt_pure_vcs_info[action]-}
+	local -a state
+
+	if [[ -n ${prompt_pure_git_conflicts-} ]]; then
+		prompt_pure_symbol git:conflicts
+		state+=($REPLY)
+	fi
+
+	if [[ -n $action ]]; then
+		zstyle -s ":prompt:pure:git:action:$action" symbol REPLY || REPLY=$action
+		state+=($REPLY)
+	elif [[ -n ${prompt_pure_vcs_info[detached]-} ]] && zstyle -t ':prompt:pure:git:detached' show; then
+		# Rebase and bisect detach HEAD, so only warn when no action explains it.
+		prompt_pure_symbol git:detached
+		state+=($REPLY)
+	fi
+
+	if [[ -n ${prompt_pure_git_last_dirty_check_timestamp+x} ]] && zstyle -t ':prompt:pure:git:cached' show; then
+		prompt_pure_symbol git:cached
+		state+=($REPLY)
+	fi
+
+	psvar[16]=${(j: :)${state:#}}
+}
+
 prompt_pure_preprompt_render() {
 	setopt localoptions noshwordsplit
 
@@ -211,8 +251,8 @@ prompt_pure_preprompt_render() {
 	# psvar[15]: Git dirty marker.
 	psvar[15]=${prompt_pure_git_dirty}
 
-	# psvar[16]: Git action (rebase/merge).
-	psvar[16]=${prompt_pure_vcs_info[action]}
+	# psvar[16]: Git state (conflicts, action, detached HEAD, cached data).
+	prompt_pure_set_git_state
 
 	# psvar[17]: Git arrows (push/pull).
 	psvar[17]=${prompt_pure_git_arrows}
@@ -382,6 +422,10 @@ prompt_pure_async_vcs_info() {
 	info[branch]=${vcs_info_msg_0_//\%/%%}
 	info[top]=$vcs_info_msg_1_
 	info[action]=$vcs_info_msg_2_
+	info[detached]=
+	if [[ -n $info[top] ]] && ! command git symbolic-ref -q HEAD >/dev/null 2>&1; then
+		info[detached]=1
+	fi
 
 	print -r - ${(@kvq)info}
 }
@@ -524,6 +568,13 @@ prompt_pure_async_git_stash() {
 	command git rev-list --walk-reflogs --count refs/stash
 }
 
+# Returns 1 when the index has unresolved conflicts. Only reads the index,
+# so it stays cheap in large repositories.
+prompt_pure_async_git_conflicts() {
+	prompt_pure_async_print_generation
+	[[ -z $(command git ls-files --unmerged 2>/dev/null) ]]
+}
+
 prompt_pure_check_node_version() {
 	setopt localoptions noshwordsplit
 
@@ -558,12 +609,13 @@ prompt_pure_async_renice() {
 }
 
 prompt_pure_clear_git_state() {
-	unset prompt_pure_git_dirty prompt_pure_git_last_dirty_check_timestamp prompt_pure_git_arrows prompt_pure_git_stash prompt_pure_git_fetch_pattern
+	unset prompt_pure_git_dirty prompt_pure_git_last_dirty_check_timestamp prompt_pure_git_arrows prompt_pure_git_stash prompt_pure_git_conflicts prompt_pure_git_fetch_pattern
 	typeset -gA prompt_pure_worker_env=()
 	typeset -gA prompt_pure_vcs_info
 	prompt_pure_vcs_info[branch]=
 	prompt_pure_vcs_info[top]=
 	prompt_pure_vcs_info[action]=
+	prompt_pure_vcs_info[detached]=
 	prompt_pure_vcs_info[pwd]=
 }
 
@@ -648,10 +700,11 @@ prompt_pure_async_tasks() {
 		$working_directory_changed == 1 ||
 		$working_tree_changed == 1 ]]; then
 		# Reset preprompt variables before syncing the new working tree.
-		unset prompt_pure_git_dirty prompt_pure_git_last_dirty_check_timestamp prompt_pure_git_arrows prompt_pure_git_stash prompt_pure_git_fetch_pattern
+		unset prompt_pure_git_dirty prompt_pure_git_last_dirty_check_timestamp prompt_pure_git_arrows prompt_pure_git_stash prompt_pure_git_conflicts prompt_pure_git_fetch_pattern
 		prompt_pure_vcs_info[branch]=
 		prompt_pure_vcs_info[top]=
 		prompt_pure_vcs_info[action]=
+		prompt_pure_vcs_info[detached]=
 	fi
 
 	if [[ $working_directory_changed == 1 ||
@@ -725,6 +778,8 @@ prompt_pure_async_refresh() {
 		async_job "prompt_pure" prompt_pure_async_git_dirty ${PURE_GIT_UNTRACKED_DIRTY:-1} $detailed_dirty || return
 	fi
 
+	async_job "prompt_pure" prompt_pure_async_git_conflicts || return
+
 	# If stash is enabled, tell async worker to count stashes
 	if zstyle -t ":prompt:pure:git:stash" show; then
 		async_job "prompt_pure" prompt_pure_async_git_stash || return
@@ -755,7 +810,7 @@ prompt_pure_async_callback() {
 	fi
 
 	case $job in
-		prompt_pure_async_vcs_info|prompt_pure_async_git_aliases|prompt_pure_async_git_dirty|prompt_pure_async_git_fetch|prompt_pure_async_git_arrows|prompt_pure_async_git_stash)
+		prompt_pure_async_vcs_info|prompt_pure_async_git_aliases|prompt_pure_async_git_dirty|prompt_pure_async_git_fetch|prompt_pure_async_git_arrows|prompt_pure_async_git_stash|prompt_pure_async_git_conflicts)
 			local result_generation=${output%%$'\n'*}
 			if [[ $output == *$'\n'* ]]; then
 				output=${output#*$'\n'}
@@ -836,6 +891,7 @@ prompt_pure_async_callback() {
 			prompt_pure_vcs_info[branch]=$info[branch]
 			prompt_pure_vcs_info[top]=$info[top]
 			prompt_pure_vcs_info[action]=$info[action]
+			prompt_pure_vcs_info[detached]=$info[detached]
 
 			do_render=1
 			;;
@@ -897,6 +953,12 @@ prompt_pure_async_callback() {
 			local prev_stash=$prompt_pure_git_stash
 			typeset -g prompt_pure_git_stash=$output
 			[[ $prev_stash != $prompt_pure_git_stash ]] && do_render=1
+			;;
+		prompt_pure_async_git_conflicts)
+			local prev_conflicts=${prompt_pure_git_conflicts-}
+			typeset -g prompt_pure_git_conflicts=
+			(( code == 1 )) && prompt_pure_git_conflicts=1
+			[[ $prev_conflicts != $prompt_pure_git_conflicts ]] && do_render=1
 			;;
 	esac
 
@@ -1097,11 +1159,13 @@ prompt_pure_preview() {
 	fi
 
 	local REPLY pass_sample fail_sample
-	prompt_pure_result_symbol pass; pass_sample=$REPLY
-	prompt_pure_result_symbol fail; fail_sample=$REPLY
+	local conflicts_sample
+	prompt_pure_symbol result:pass; pass_sample=$REPLY
+	prompt_pure_symbol result:fail; fail_sample=$REPLY
+	prompt_pure_symbol git:conflicts; conflicts_sample=$REPLY
 
 	# Sample preprompt with all components visible.
-	print -P "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}${PURE_SUSPENDED_JOBS_SYMBOL-✦}%f %F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}main%f%F{$c[git:dirty]}*%f %F{$c[git:action]}rebase-i%f %F{$c[git:arrow]}${PURE_GIT_DOWN_ARROW:-⇣}${PURE_GIT_UP_ARROW:-⇡}%f %F{$c[git:stash]}${PURE_GIT_STASH_SYMBOL-≡}%f %F{$c[node_version]}${node_symbol}22%f %F{$c[result:pass]}${pass_sample}%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
+	print -P "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}${PURE_SUSPENDED_JOBS_SYMBOL-✦}%f %F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}main%f%F{$c[git:dirty]}*%f %F{$c[git:action]}${conflicts_sample} rebase-i%f %F{$c[git:arrow]}${PURE_GIT_DOWN_ARROW:-⇣}${PURE_GIT_UP_ARROW:-⇡}%f %F{$c[git:stash]}${PURE_GIT_STASH_SYMBOL-≡}%f %F{$c[node_version]}${node_symbol}22%f %F{$c[result:pass]}${pass_sample}%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
 	print -P "%F{$c[virtualenv]}venv%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
 	print
 	print -P "%F{$c[result:fail]}${fail_sample} 1%f"
@@ -1197,7 +1261,7 @@ prompt_pure_setup() {
 	#   psvar[13] = username flag, renders user/host (e.g. user@host)
 	#   psvar[14] = git branch
 	#   psvar[15] = git dirty marker, nested inside [14] conditional
-	#   psvar[16] = git action (e.g. rebase, merge)
+	#   psvar[16] = git state (e.g. [FIXME] merge)
 	#   psvar[17] = git arrows (e.g. ⇣⇡)
 	#   psvar[18] = git stash symbol (e.g. ≡)
 	#   psvar[19] = exec time (e.g. 1d 3h 2m 5s)

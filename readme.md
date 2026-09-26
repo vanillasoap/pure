@@ -121,6 +121,24 @@ Git integration is enabled by default, you can disable it with:
 
 `zstyle :prompt:pure:git show no`
 
+Unresolved merge conflicts show as `[FIXME]` next to the Git action. You can change the tag, or set it to empty to hide it:
+
+`zstyle :prompt:pure:git:conflicts symbol '!'`
+
+Git actions (`rebase-i`, `merge`, `cherry-pick`, `bisect`, and others) show as text. You can replace any action with a symbol:
+
+`zstyle :prompt:pure:git:action:bisect symbol '[BUG]'`
+
+A detached HEAD can show as `[WARN]` when no action is in progress. It is not enabled by default. You can enable it with:
+
+`zstyle :prompt:pure:git:detached show yes`
+
+When `git status` is slow, Pure delays the dirty check and shows the branch in the `git:branch:cached` color. You can also show a `[WARN]` tag for this with:
+
+`zstyle :prompt:pure:git:cached show yes`
+
+The detached and cached tags can be changed with the `symbol` style, like the conflicts tag.
+
 Detailed dirty indicators differentiate between unstaged (`*`), staged (`+`), and untracked (`?`) changes instead of showing a single `*`. It is not enabled by default. You can enable it with:
 
 `zstyle :prompt:pure:git:dirty detailed yes`
@@ -195,7 +213,7 @@ Colors can be changed by using [`zstyle`](http://zsh.sourceforge.net/Doc/Release
 - `git:stash` (cyan) - For `PURE_GIT_STASH_SYMBOL`.
 - `git:branch` (242) - The name of the current branch when in a Git repository.
 - `git:branch:cached` (red) - The name of the current branch when the data isn't fresh.
-- `git:action` (yellow) - The current action in progress (cherry-pick, rebase, etc.) when in a Git repository.
+- `git:action` (yellow) - The current action in progress (cherry-pick, rebase, etc.) and the conflict, detached HEAD and cached data tags when in a Git repository.
 - `git:dirty` (218) - The asterisk showing the branch is dirty.
 - `host` (242) - The hostname when on a remote machine.
 - `node_version` (green) - The current major Node.js version in directories with `package.json`.
