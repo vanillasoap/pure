@@ -348,6 +348,14 @@ prompt_pure_precmd() {
 	local exit_status=$?
 	setopt localoptions noshwordsplit
 
+	# Bring back the full prompt after a transient prompt. This runs before
+	# terminal integrations that move their precmd hook last, so they see the
+	# prompt exactly as they left it.
+	if (( ${+prompt_pure_full_prompt} )); then
+		PROMPT=$prompt_pure_full_prompt
+		unset prompt_pure_full_prompt
+	fi
+
 	# Check execution time and result, and store them in variables.
 	prompt_pure_check_cmd_exec_time
 	prompt_pure_check_cmd_result $exit_status
@@ -1048,6 +1056,26 @@ prompt_pure_reset_vim_prompt_widget() {
 	# removes the prompt marks inserted by macOS Terminal.
 }
 
+# Collapses the prompt of an accepted line to just the prompt symbol, when
+# enabled. Precmd restores the full prompt. Opt-in, because redrawing the
+# prompt here removes the prompt marks that macOS Terminal inserts.
+prompt_pure_transient_prompt_widget() {
+	setopt localoptions noshwordsplit
+
+	[[ $CONTEXT == start ]] || return 0
+	(( ! ${+prompt_pure_full_prompt} )) || return 0
+	zstyle -t ':prompt:pure:prompt' transient || return 0
+
+	typeset -g prompt_pure_full_prompt=$PROMPT
+
+	# Keep prompt marks that terminal integrations (Ghostty, VS Code) wrap
+	# around the prompt, so the collapsed line still counts as a prompt.
+	local mark_start=${(M)PROMPT#'%{'*'%}'} mark_end=${(M)PROMPT%'%{'*'%}'}
+	PROMPT="${mark_start}%(?.%F{\$prompt_pure_colors[prompt:success]}.%F{\$prompt_pure_colors[prompt:error]})\${prompt_pure_state[prompt]}%f ${mark_end}"
+
+	zle .reset-prompt
+}
+
 prompt_pure_state_setup() {
 	setopt localoptions noshwordsplit
 
@@ -1284,8 +1312,10 @@ prompt_pure_setup() {
 	zle -N prompt_pure_reset_prompt
 	zle -N prompt_pure_update_vim_prompt_widget
 	zle -N prompt_pure_reset_vim_prompt_widget
+	zle -N prompt_pure_transient_prompt_widget
 	if (( $+functions[add-zle-hook-widget] )); then
 		add-zle-hook-widget zle-line-finish prompt_pure_reset_vim_prompt_widget
+		add-zle-hook-widget zle-line-finish prompt_pure_transient_prompt_widget
 		add-zle-hook-widget zle-keymap-select prompt_pure_update_vim_prompt_widget
 	fi
 

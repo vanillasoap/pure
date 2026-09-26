@@ -178,6 +178,10 @@ Hostname display is enabled by default when in an SSH session or container. You 
 
 `zstyle :prompt:pure:host show no`
 
+A transient prompt replaces the prompt of each finished command with just the prompt symbol, which keeps the scrollback short. It keeps the prompt marks that terminal integrations like Ghostty and VS Code add, but removes the marks macOS Terminal inserts. It is not enabled by default. You can enable it with:
+
+`zstyle :prompt:pure:prompt transient yes`
+
 Automatic terminal title management can be disabled if you want to set your own tab or window titles:
 
 `zstyle :prompt:pure:title show no`
