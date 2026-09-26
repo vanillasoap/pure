@@ -53,6 +53,41 @@ prompt_pure_check_cmd_exec_time() {
 	}
 }
 
+# Sets REPLY to the tag shown for a command result: pass, fail, error or fatal.
+prompt_pure_result_symbol() {
+	local -A defaults=(pass '[PASS]' fail '[FAIL]' error '[ERROR]' fatal '[FATAL]')
+	zstyle -s ":prompt:pure:result:$1" symbol REPLY || REPLY=$defaults[$1]
+}
+
+# Stores (into psvar[24]) how the last command ended, when enabled. Success
+# is only shown for commands that exceeded the execution time threshold.
+# Interrupted (Ctrl-C) and suspended (Ctrl-Z) commands show nothing.
+prompt_pure_check_cmd_result() {
+	setopt localoptions noshwordsplit
+	local exit_status=$1 kind detail signal REPLY
+	psvar[24]=
+
+	zstyle -t ':prompt:pure:result' show || return 0
+	# Pressing enter on an empty line keeps the previous status, skip it.
+	(( ${+prompt_pure_cmd_timestamp} )) || return 0
+
+	# Statuses above 128 mean the command was killed by signal (status - 128).
+	# $signals starts at signal 0 and ends with the ZERR and DEBUG pseudo-signals.
+	(( exit_status > 128 )) && signal=${signals[exit_status - 127]:#(ZERR|DEBUG)}
+
+	case $exit_status:$signal in
+		0:) [[ -n $prompt_pure_cmd_exec_time ]] && kind=pass ;;
+		*:(INT|TSTP|TTIN|TTOU|STOP)) ;;
+		12[67]:) kind=error detail=$exit_status ;;  # Not executable, not found.
+		*:?*) kind=fatal detail=SIG$signal ;;
+		*) kind=fail detail=$exit_status ;;
+	esac
+	[[ -n $kind ]] || return 0
+
+	prompt_pure_result_symbol $kind
+	[[ -z $REPLY ]] || psvar[24]=$REPLY${detail:+ $detail}
+}
+
 prompt_pure_set_title() {
 	setopt localoptions noshwordsplit
 
@@ -220,6 +255,7 @@ prompt_pure_preprompt_render() {
 		"${psvar[21]}"
 		"${psvar[22]}"
 		"${psvar[23]}"
+		"${psvar[24]}"
 		"${prompt_pure_state[prompt]}"
 		"${prompt_pure_git_branch_color}"
 		"${PWD}"
@@ -238,10 +274,13 @@ prompt_pure_preprompt_render() {
 }
 
 prompt_pure_precmd() {
+	# Must come first, any other command overwrites $?.
+	local exit_status=$?
 	setopt localoptions noshwordsplit
 
-	# Check execution time and store it in a variable.
+	# Check execution time and result, and store them in variables.
 	prompt_pure_check_cmd_exec_time
+	prompt_pure_check_cmd_result $exit_status
 	unset prompt_pure_cmd_timestamp
 
 	# Shows the full path in the title.
@@ -1057,10 +1096,15 @@ prompt_pure_preview() {
 		host_sample="%F{$c[host]}@heartofgold%f"
 	fi
 
+	local REPLY pass_sample fail_sample
+	prompt_pure_result_symbol pass; pass_sample=$REPLY
+	prompt_pure_result_symbol fail; fail_sample=$REPLY
+
 	# Sample preprompt with all components visible.
-	print -P "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}${PURE_SUSPENDED_JOBS_SYMBOL-✦}%f %F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}main%f%F{$c[git:dirty]}*%f %F{$c[git:action]}rebase-i%f %F{$c[git:arrow]}${PURE_GIT_DOWN_ARROW:-⇣}${PURE_GIT_UP_ARROW:-⇡}%f %F{$c[git:stash]}${PURE_GIT_STASH_SYMBOL-≡}%f %F{$c[node_version]}${node_symbol}22%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
+	print -P "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}${PURE_SUSPENDED_JOBS_SYMBOL-✦}%f %F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}main%f%F{$c[git:dirty]}*%f %F{$c[git:action]}rebase-i%f %F{$c[git:arrow]}${PURE_GIT_DOWN_ARROW:-⇣}${PURE_GIT_UP_ARROW:-⇡}%f %F{$c[git:stash]}${PURE_GIT_STASH_SYMBOL-≡}%f %F{$c[node_version]}${node_symbol}22%f %F{$c[result:pass]}${pass_sample}%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
 	print -P "%F{$c[virtualenv]}venv%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
 	print
+	print -P "%F{$c[result:fail]}${fail_sample} 1%f"
 	print -P "%F{$c[prompt:error]}${PURE_PROMPT_SYMBOL:-❯}%f  prompt after error"
 	print; print
 	print -P "%F{$c[git:branch:cached]}main%f  branch color when data is cached"
@@ -1116,6 +1160,8 @@ prompt_pure_setup() {
 		prompt:error         red
 		prompt:success       magenta
 		prompt:continuation  242
+		result:fail          red
+		result:pass          green
 		suspended_jobs       red
 		user                 242
 		user:root            default
@@ -1141,7 +1187,7 @@ prompt_pure_setup() {
 	typeset -g prompt_pure_git_branch_color=$prompt_pure_colors[git:branch]
 
 	# Construct PROMPT once, both preprompt and prompt line. Kept
-	# dynamic via variables and psvar[12-21], updated each render
+	# dynamic via variables and psvar[12-24], updated each render
 	# in prompt_pure_preprompt_render. Numbering starts at 12 for
 	# legacy reasons (Pure originally used psvar[12] for virtualenv)
 	# and to avoid collisions with low psvar indices which users
@@ -1159,9 +1205,10 @@ prompt_pure_setup() {
 	#   psvar[21] = Node.js version (e.g. ⬢22)
 	#   psvar[22] = custom prefix (set by prompt_pure_precustom)
 	#   psvar[23] = custom suffix (set by prompt_pure_precustom)
+	#   psvar[24] = last command result (e.g. [FAIL] 1), set in precmd
 	#
 	# Example output:
-	#   prefix ✦ user@host ~/Code/pure main* rebase ⇣⇡ ≡ ⬢22 3s suffix
+	#   prefix ✦ user@host ~/Code/pure main* rebase ⇣⇡ ≡ ⬢22 [PASS] 3s suffix
 	#   myenv ❯
 	#
 	# Preprompt line: each %(NV..) section only renders when its psvar is non-empty.
@@ -1179,6 +1226,8 @@ prompt_pure_setup() {
 	PROMPT+='%(17V. %F{$prompt_pure_colors[git:arrow]}%17v%f.)'
 	PROMPT+='%(18V. %F{$prompt_pure_colors[git:stash]}%18v%f.)'
 	PROMPT+='%(21V. %F{$prompt_pure_colors[node_version]}%21v%f.)'
+	# Keep the result in one color run so ligature fonts can join the tag.
+	PROMPT+='%(24V. %(?.%F{$prompt_pure_colors[result:pass]}.%F{$prompt_pure_colors[result:fail]})%24v%f.)'
 	PROMPT+='%(19V. %F{$prompt_pure_colors[execution_time]}%19v%f.)'
 	PROMPT+='%(23V. %F{$prompt_pure_colors[custom:suffix]}%23v%f.)'
 

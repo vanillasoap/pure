@@ -20,6 +20,8 @@ main() {
 		prompt:error         red
 		prompt:success       magenta
 		prompt:continuation  242
+		result:fail          red
+		result:pass          green
 		suspended_jobs       red
 		user                 242
 		user:root            default
@@ -31,7 +33,7 @@ main() {
 	local output
 	output=$(prompt_pure_preview 2>&1)
 
-	for component in prefix suffix zaphod heartofgold "~/dev/pure" "main" "rebase-i" "42s" "venv" "prompt after error" "continuation prompt" "root" "branch color when data is cached"; do
+	for component in prefix suffix zaphod heartofgold "~/dev/pure" "main" "rebase-i" "42s" "[PASS]" "[FAIL] 1" "venv" "prompt after error" "continuation prompt" "root" "branch color when data is cached"; do
 		if [[ $output != *"$component"* ]]; then
 			print -u2 "Missing component in preview output: $component"
 			return 1

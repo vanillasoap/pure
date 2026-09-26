@@ -137,6 +137,17 @@ Automatic terminal title management can be disabled if you want to set your own 
 
 `zstyle :prompt:pure:title show no`
 
+The command result shows how the last command ended: `[FAIL] 1` for a non-zero exit, `[ERROR] 127` when the command could not be found or run, `[FATAL] SIGKILL` when a signal killed it, and `[PASS]` when a command that exceeded `PURE_CMD_MAX_EXEC_TIME` succeeded. Ctrl-C and Ctrl-Z show nothing. It is not enabled by default. You can enable it with:
+
+`zstyle :prompt:pure:result show yes`
+
+You can change each tag with the `pass`, `fail`, `error` and `fatal` styles, or set one to empty to hide it. For example, to use the shorter tags:
+
+```sh
+zstyle :prompt:pure:result:pass symbol '[OK]'
+zstyle :prompt:pure:result:fail symbol '[KO]'
+```
+
 ## Customization
 
 Pure supports a hook function for adding custom content to the prompt. Define a function called `prompt_pure_precustom` in your `.zshrc` (after `prompt pure`) to set custom prefix and suffix segments on the preprompt line:
@@ -192,6 +203,8 @@ Colors can be changed by using [`zstyle`](http://zsh.sourceforge.net/Doc/Release
 - `prompt:error` (red) - The `PURE_PROMPT_SYMBOL` when the previous command has *failed*.
 - `prompt:success` (magenta) - The `PURE_PROMPT_SYMBOL` when the previous command has *succeeded*.
 - `prompt:continuation` (242) - The color for showing the state of the parser in the continuation prompt (PS2). It's the pink part in [this screenshot](https://user-images.githubusercontent.com/147409/70068574-ebc74800-15f8-11ea-84c0-8b94a4b57ff4.png), it appears in the same spot as `virtualenv`. You could for example matching both colors so that Pure has a uniform look.
+- `result:pass` (green) - The command result when the last command succeeded.
+- `result:fail` (red) - The command result when the last command failed.
 - `suspended_jobs` (red) - The `PURE_SUSPENDED_JOBS_SYMBOL`.
 - `user` (242) - The username when on remote machine.
 - `user:root` (default) - The username when the user is root.
