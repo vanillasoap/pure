@@ -1201,51 +1201,156 @@ prompt_pure_system_report() {
 	fi
 }
 
-prompt_pure_preview() {
-	setopt localoptions noshwordsplit
-	local -a psvar=("${psvar[@]}")
-
+# Keep sample state, styles and the row formatter out of the running shell.
+prompt_pure_preview() (
+	setopt localoptions noshwordsplit extendedglob
 	prompt_pure_set_colors
 
 	local -A c=("${(@kv)prompt_pure_colors}")
 	local -A i=("${(@kv)prompt_pure_italic}")
+	integer width=${COLUMNS:-80}
+	(( width > 88 )) && width=88
+	(( width < 10 )) && width=10
+	integer content_width=$(( width - 4 ))
+	local edge=${(%):-'%F{242}|%f'}
+	local empty=''
+	local border="+${(l:$(( width - 2 ))::-:)empty}+"
+
+	# Expand once: %v can contain literal prompt syntax. Measure terminal
+	# columns after removing SGR colors/attributes, including wide glyphs.
+	prompt_pure_preview_row() {
+		local text="%${content_width}>...>$1%>>%f"
+		text=${(%)text}
+		local plain=${text//$'\e'\[[0-9\;]#m/}
+		integer padding=$(( content_width - ${(m)#plain} ))
+		print -r -- "$edge $text${(l:$padding:: :)empty} $edge"
+	}
+
 	local path_sample="%F{$c[path]}${i[path]-}~/dev/pure${i[path:end]-}%f"
 	if zstyle -t ':prompt:pure:path:separator' dim; then
 		path_sample=$(prompt_pure_render_dimmed_path '~/dev/pure')
 	fi
-
+	local branch_sample="%F{$c[git:branch]}%26v${i[git:branch]-}main${i[git:branch:end]-}%f"
 	local host_sample=''
-	if zstyle -T ":prompt:pure:host" show; then
-		host_sample="%F{$c[host]}@heartofgold%f"
-	fi
+	zstyle -T ':prompt:pure:host' show && host_sample="%F{$c[host]}@heartofgold%f"
+	local insert_sample="%F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
+	local error_sample="%F{$c[prompt:error]}${PURE_PROMPT_ERROR_SYMBOL:-${PURE_PROMPT_SYMBOL:-❯}}%f"
+	local vi_sample="%F{$c[prompt:success]}${PURE_PROMPT_VICMD_SYMBOL:-❮}%f"
+	local REPLY kind detail label ink
 
-	local REPLY
-	prompt_pure_symbol environment:node_version; psvar[21]=${REPLY}22
-	prompt_pure_symbol result:pass; psvar[24]=$REPLY
-	prompt_pure_check_git_arrows 3 2; psvar[17]=$REPLY
+	print -rP -- "%F{242}${border}%f"
+	prompt_pure_preview_row '%B PURE PREVIEW%b'
+	prompt_pure_preview_row 'Sample states using your colors and symbols.'
+	prompt_pure_preview_row 'Optional segments are included for comparison.'
+	prompt_pure_preview_row ''
+	prompt_pure_preview_row '%BEveryday prompt%b'
+	prompt_pure_preview_row "$path_sample $branch_sample"
+	prompt_pure_preview_row "$insert_sample git status --short"
+	prompt_pure_preview_row ''
+	prompt_pure_preview_row '%BCommand results%b'
+	for kind detail label in \
+		pass '' 'success after 42s' \
+		fail ' 1' 'non-zero exit' \
+		error ' 127' 'command not found' \
+		fatal ' SIGKILL' 'terminated by signal'; do
+		prompt_pure_symbol result:$kind
+		psvar[24]=${REPLY:+$REPLY$detail}
+		ink=$c[result:fail]
+		[[ $kind == pass ]] && ink=$c[result:pass]
+		if [[ -n $psvar[24] ]]; then
+			prompt_pure_preview_row "%F{$ink}%24v%f  $label"
+		else
+			prompt_pure_preview_row "%F{242}(hidden)%f  $label"
+		fi
+	done
+	prompt_pure_preview_row "$error_sample false  %F{242}prompt after error%f"
+	prompt_pure_preview_row ''
+	prompt_pure_preview_row '%BGit states%b'
+	local dirty='*'
+	zstyle -t ':prompt:pure:git:dirty' detailed && dirty='*+?'
+	prompt_pure_preview_row "$branch_sample%F{$c[git:dirty]}$dirty%f  %F{242}working tree changes%f"
+	local ahead behind
+	for ahead behind label in 3 0 outgoing 0 2 incoming 3 2 diverged; do
+		prompt_pure_check_git_arrows $ahead $behind
+		psvar[17]=$REPLY
+		prompt_pure_preview_row "$branch_sample %F{$c[git:arrow]}%17v%f  %F{242}$label%f"
+	done
+	unset prompt_pure_git_last_dirty_check_timestamp
+	local -A prompt_pure_vcs_info=(action rebase-i detached '')
+	local prompt_pure_git_conflicts=1
+	prompt_pure_set_git_state
+	prompt_pure_preview_row "$branch_sample %F{$c[git:action]}${i[git:action]-}%16v${i[git:action:end]-}%f"
+	unset prompt_pure_git_conflicts
+	prompt_pure_vcs_info=(action '' detached 1)
+	zstyle ':prompt:pure:git:detached' show yes
+	prompt_pure_set_git_state
+	prompt_pure_preview_row "%F{$c[git:branch]}a1b2c3d%f %F{$c[git:action]}%16v%f  detached HEAD"
+	prompt_pure_vcs_info[detached]=
+	prompt_pure_git_last_dirty_check_timestamp=0
+	zstyle ':prompt:pure:git:cached' show yes
+	prompt_pure_set_git_state
+	prompt_pure_preview_row "%F{$c[git:branch:cached]}main%f %F{$c[git:action]}%16v%f  cached Git status"
+	prompt_pure_preview_row ''
+	prompt_pure_preview_row '%BContext and prompt modes%b'
 	psvar[12]=${PURE_SUSPENDED_JOBS_SYMBOL-✦}
 	[[ -n $psvar[12] ]] && zstyle -t ':prompt:pure:suspended_jobs' count && psvar[12]+=2
 	psvar[18]=${PURE_GIT_STASH_SYMBOL-≡}
 	[[ -n $psvar[18] ]] && zstyle -t ':prompt:pure:git:stash' count && psvar[18]+=3
+	prompt_pure_symbol environment:node_version; psvar[21]=${REPLY}22
+	prompt_pure_preview_row "%F{$c[host]}%25v%f%F{$c[user]}zaphod%f${host_sample}  %F{$c[user:root]}root%f${host_sample}"
+	prompt_pure_preview_row "%F{$c[virtualenv]}%27v${i[virtualenv]-}venv${i[virtualenv:end]-}%f $insert_sample python -V"
+	prompt_pure_preview_row "Jobs %F{$c[suspended_jobs]}%12v%f   Stash %F{$c[git:stash]}%18v%f   Node %F{$c[node_version]}%21v%f"
+	prompt_pure_preview_row "%F{$c[custom:prefix]}prefix%f  $path_sample  %F{$c[execution_time]}42s%f  %F{$c[custom:suffix]}suffix%f"
+	prompt_pure_preview_row "$vi_sample %F{242}Vim command mode%f"
+	prompt_pure_preview_row "%F{$c[prompt:continuation]}… if%f $insert_sample %F{242}continuation prompt%f"
+	prompt_pure_preview_row "$insert_sample git status  %F{242}transient prompt%f"
+	prompt_pure_preview_row ''
+	prompt_pure_preview_row '%BPragmataPro gallery%b'
+	prompt_pure_preview_row 'Font samples; these do not enable extra segments.'
 
-	local -A prompt_pure_vcs_info=(action rebase-i)
-	local prompt_pure_git_conflicts=1
-	prompt_pure_set_git_state
-
-	# Sample preprompt with all components visible.
-	print -rP -- "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}%12v%f %F{$c[host]}%25v%f%F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}%26v${i[git:branch]-}main${i[git:branch:end]-}%f%F{$c[git:dirty]}*%f %F{$c[git:action]}${i[git:action]-}%16v${i[git:action:end]-}%f %F{$c[git:arrow]}%17v%f %F{$c[git:stash]}%18v%f %F{$c[node_version]}%21v%f %F{$c[result:pass]}%24v%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
-	print -rP -- "%F{$c[virtualenv]}%27v${i[virtualenv]-}venv${i[virtualenv:end]-}%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
-	print
-	prompt_pure_symbol result:fail; psvar[24]=$REPLY
-	print -rP -- "%F{$c[result:fail]}%24v 1%f"
-	print -rP -- "%F{$c[prompt:error]}${PURE_PROMPT_ERROR_SYMBOL:-${PURE_PROMPT_SYMBOL:-❯}}%f  prompt after error"
-	print; print
-	print -rP -- "%F{$c[git:branch:cached]}main%f  branch color when data is cached"
-	print; print
-	print -rP -- "%F{$c[user:root]}root%f${host_sample}  root user"
-	print; print
-	print -rP -- "%F{$c[prompt:continuation]}… if%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f  continuation prompt"
-}
+	# Pack whole sequences into rows, so narrow terminals keep every badge
+	# and each ligature stays in a single color run.
+	local -a samples
+	local sample row
+	integer used
+	for kind in badges operators; do
+		if [[ $kind == badges ]]; then
+			prompt_pure_preview_row '%BBadges%b'
+			samples=('[OK]' '[PASS]' '[PASS ]' '[KO]' '[FAIL]' '[ERR]' '[ERROR]' '[FATAL]'
+				'[WARN]' '[WARN ]' '[WARNING]' '[FIXME]' '[INFO]' '[INFO ]' '[NOTE]' '[MARK]'
+				'[BUG]' '[DEBUG]' '[TRACE]' '[VERBOSE]' '[TODO]' '[HACK]')
+		else
+			prompt_pure_preview_row '%BOperators and arrows%b'
+			samples=('->' '<-' '<->' '=>' '<=' '<=>' '-->' '<--' '<-->' '==>' '<==' '<==>'
+				'!=' '!==' '==' '===' '>=' '&&' '||' '|>' '<|' '|->' '|=>' '<~' '~>' '<~>'
+				'<$>' '<*>' '<+>' '</>' '<!>' '<?>' '<#>' '<@>')
+		fi
+		row= used=0
+		for sample in "${samples[@]}"; do
+			if (( used && used + 1 + ${#sample} > content_width )); then
+				prompt_pure_preview_row "$row"
+				row= used=0
+			fi
+			case $sample in
+				'[OK]'|'[PASS]'|'[PASS ]') ink=$c[result:pass] ;;
+				'[KO]'|'[FAIL]'|'[ERR]'|'[ERROR]'|'[FATAL]') ink=$c[result:fail] ;;
+				'[WARN]'|'[WARN ]'|'[WARNING]'|'[FIXME]'|'[TODO]'|'[HACK]') ink=$c[git:action] ;;
+				*) ink=$c[git:arrow] ;;
+			esac
+			if (( used )); then
+				row+=' '
+				(( used++ ))
+			fi
+			row+="%F{$ink}$sample%f"
+			(( used += ${#sample} ))
+		done
+		[[ -n $row ]] && prompt_pure_preview_row "$row"
+	done
+	prompt_pure_preview_row ''
+	prompt_pure_preview_row 'Ligatures depend on your terminal and font settings.'
+	prompt_pure_preview_row '%B END PURE PREVIEW%b'
+	print -rP -- "%F{242}${border}%f"
+)
 
 prompt_pure_setup() {
 	# Prevent percentage showing up if output doesn't end with a newline.

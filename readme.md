@@ -323,23 +323,22 @@ prompt pure
 
 ### PragmataPro ligatures
 
-[PragmataPro supports these operator ligatures](https://gist.github.com/fabrizioschiavi/f40a54c8211833c75c81ec82f0c0dd1c). With ligatures enabled in your terminal, this setup replaces the existing prompt and Git markers without adding any segments. Put it before `prompt pure` in `.zshrc`:
+[PragmataPro supports these operator ligatures](https://gist.github.com/fabrizioschiavi/f40a54c8211833c75c81ec82f0c0dd1c). With ligatures enabled in your terminal, this setup replaces the Git markers without adding any segments. Put it before `prompt pure` in `.zshrc`:
 
 ```sh
-PURE_PROMPT_SYMBOL='=>'
-PURE_PROMPT_VICMD_SYMBOL='<='
-PURE_PROMPT_ERROR_SYMBOL='!='
 PURE_GIT_DOWN_ARROW='<-'
 PURE_GIT_UP_ARROW='->'
 zstyle :prompt:pure:git:diverged symbol '<->'
 zstyle :prompt:pure:git:conflicts symbol '<!>'
 ```
 
-`<-` means incoming commits; `->` means outgoing commits. `<->` replaces both when the branch has diverged. `!=` marks a failed command, and `<!>` appears for unresolved conflicts. The prompt symbol occupies two columns in both insert and command mode.
+`<-` means incoming commits; `->` means outgoing commits. `<->` replaces both when the branch has diverged, and `<!>` appears for unresolved conflicts. The prompt keeps `❯` and `❮`, with `❯` turning red after a failed command.
 
-The symbols remain readable ASCII without ligatures. Keep each sequence in one color and font style so the terminal can join it. Ligatures still occupy the columns of their source characters; `[FAIL]` takes six columns, while `!=` takes two.
+The Git markers remain readable ASCII without ligatures. Keep each sequence in one color and font style so the terminal can join it. Ligatures still occupy the columns of their source characters; `<->` takes three columns, while `->` takes two.
 
-Run `prompt -p pure` to preview the symbols and colors. If you also enable command results, the shorter `[OK]` and `[KO]` tags shown above keep those labels to four columns each.
+Run `prompt -p pure` for a framed preview of command results, Git states, environments and prompt modes using your configured colors and symbols. It also includes all 22 badge spellings from the linked ligature list and a selection of operator ligatures. The gallery fits its rows to the terminal width and leaves your prompt settings unchanged.
+
+If you also enable command results, the shorter `[OK]` and `[KO]` tags shown above keep those labels to four columns each.
 
 ## Tips
 
