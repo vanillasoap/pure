@@ -160,6 +160,10 @@ Path separator dimming makes `/` characters in the path visually dimmer to help 
 
 `zstyle :prompt:pure:path:separator dim yes`
 
+The path, Git branch, Git action and virtualenv can be shown in italic. Pair it with an italic font that has its own style, like a script face, to set those parts apart. It is not enabled by default. You can enable it per part, or for all of them with `':prompt:pure:*'`:
+
+`zstyle :prompt:pure:git:branch italic yes`
+
 Hostname display is enabled by default when in an SSH session or container. You can disable it while still showing the username with:
 
 `zstyle :prompt:pure:host show no`

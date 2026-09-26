@@ -165,13 +165,22 @@ prompt_pure_set_colors() {
 		esac
 	done
 
+	# Italic start and end sequences per prompt part, empty unless enabled.
+	# Zsh has no prompt escape for italic, so use the terminal codes.
+	typeset -gA prompt_pure_italic=()
+	for key in path git:branch git:action virtualenv; do
+		zstyle -t ":prompt:pure:$key" italic || continue
+		prompt_pure_italic[$key]=$'%{\e[3m%}'
+		prompt_pure_italic[${key}:end]=$'%{\e[23m%}'
+	done
+
 	prompt_pure_set_path_separator
 
 	return 0
 }
 
 prompt_pure_set_path_separator() {
-	typeset -g prompt_pure_path_segment="%F{${prompt_pure_colors[path]}}%~%f"
+	typeset -g prompt_pure_path_segment="%F{${prompt_pure_colors[path]}}${prompt_pure_italic[path]-}%~${prompt_pure_italic[path:end]-}%f"
 
 	if zstyle -t ':prompt:pure:path:separator' dim; then
 		typeset -g prompt_pure_path_separator_dimmed=1
@@ -182,6 +191,7 @@ prompt_pure_set_path_separator() {
 
 prompt_pure_render_dimmed_path() {
 	setopt localoptions noshwordsplit
+	typeset -gA prompt_pure_italic
 
 	# This runs from PROMPT_SUBST so directory changes followed by reset-prompt redraw correctly without precmd.
 	local current_path=${1:-${(%):-%~}}
@@ -194,7 +204,7 @@ prompt_pure_render_dimmed_path() {
 		prefix=/
 		current_path=${current_path:1}
 	fi
-	print -n -r -- "%F{${prompt_pure_colors[path]}}${prefix}${current_path//\//$separator}%f"
+	print -n -r -- "%F{${prompt_pure_colors[path]}}${prompt_pure_italic[path]-}${prefix}${current_path//\//$separator}${prompt_pure_italic[path:end]-}%f"
 }
 
 # Stores (into psvar[16]) the Git state: unresolved conflicts, the action in
@@ -1169,7 +1179,8 @@ prompt_pure_preview() {
 	local node_symbol
 	zstyle -s ":prompt:pure:environment:node_version" symbol node_symbol || node_symbol='⬢'
 
-	local path_sample="%F{$c[path]}~/dev/pure%f"
+	local -A i=("${(@kv)prompt_pure_italic}")
+	local path_sample="%F{$c[path]}${i[path]-}~/dev/pure${i[path:end]-}%f"
 	if zstyle -t ':prompt:pure:path:separator' dim; then
 		path_sample=$(prompt_pure_render_dimmed_path '~/dev/pure')
 	fi
@@ -1186,8 +1197,8 @@ prompt_pure_preview() {
 	prompt_pure_symbol git:conflicts; conflicts_sample=$REPLY
 
 	# Sample preprompt with all components visible.
-	print -P "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}${PURE_SUSPENDED_JOBS_SYMBOL-✦}%f %F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}main%f%F{$c[git:dirty]}*%f %F{$c[git:action]}${conflicts_sample} rebase-i%f %F{$c[git:arrow]}${PURE_GIT_DOWN_ARROW:-⇣}${PURE_GIT_UP_ARROW:-⇡}%f %F{$c[git:stash]}${PURE_GIT_STASH_SYMBOL-≡}%f %F{$c[node_version]}${node_symbol}22%f %F{$c[result:pass]}${pass_sample}%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
-	print -P "%F{$c[virtualenv]}venv%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
+	print -P "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}${PURE_SUSPENDED_JOBS_SYMBOL-✦}%f %F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}${i[git:branch]-}main${i[git:branch:end]-}%f%F{$c[git:dirty]}*%f %F{$c[git:action]}${i[git:action]-}${conflicts_sample} rebase-i${i[git:action:end]-}%f %F{$c[git:arrow]}${PURE_GIT_DOWN_ARROW:-⇣}${PURE_GIT_UP_ARROW:-⇡}%f %F{$c[git:stash]}${PURE_GIT_STASH_SYMBOL-≡}%f %F{$c[node_version]}${node_symbol}22%f %F{$c[result:pass]}${pass_sample}%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
+	print -P "%F{$c[virtualenv]}${i[virtualenv]-}venv${i[virtualenv:end]-}%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
 	print
 	print -P "%F{$c[result:fail]}${fail_sample} 1%f"
 	print -P "%F{$c[prompt:error]}${PURE_PROMPT_ERROR_SYMBOL:-${PURE_PROMPT_SYMBOL:-❯}}%f  prompt after error"
@@ -1228,7 +1239,7 @@ prompt_pure_setup() {
 	autoload -Uz +X add-zle-hook-widget 2>/dev/null
 
 	# Set the colors.
-	typeset -gA prompt_pure_colors_default prompt_pure_colors
+	typeset -gA prompt_pure_colors_default prompt_pure_colors prompt_pure_italic
 	prompt_pure_colors_default=(
 		custom:prefix        242
 		custom:suffix        242
@@ -1306,8 +1317,8 @@ prompt_pure_setup() {
 	PROMPT+='%(13V.%F{$prompt_pure_colors['"${prompt_pure_state[user_color]:-user}"']}%n%f'"${hostname_part}"' .)'
 	prompt_pure_set_path_separator
 	PROMPT+='${${prompt_pure_path_separator_dimmed:+$(prompt_pure_render_dimmed_path)}:-${prompt_pure_path_segment}}'
-	PROMPT+='%(14V. %F{${prompt_pure_git_branch_color}}%14v%(15V.%F{$prompt_pure_colors[git:dirty]}%15v.)%f.)'
-	PROMPT+='%(16V. %F{$prompt_pure_colors[git:action]}%16v%f.)'
+	PROMPT+='%(14V. %F{${prompt_pure_git_branch_color}}${prompt_pure_italic[git:branch]}%14v${prompt_pure_italic[git:branch:end]}%(15V.%F{$prompt_pure_colors[git:dirty]}%15v.)%f.)'
+	PROMPT+='%(16V. %F{$prompt_pure_colors[git:action]}${prompt_pure_italic[git:action]}%16v${prompt_pure_italic[git:action:end]}%f.)'
 	PROMPT+='%(17V. %F{$prompt_pure_colors[git:arrow]}%17v%f.)'
 	PROMPT+='%(18V. %F{$prompt_pure_colors[git:stash]}%18v%f.)'
 	PROMPT+='%(21V. %F{$prompt_pure_colors[node_version]}%21v%f.)'
@@ -1320,7 +1331,7 @@ prompt_pure_setup() {
 	PROMPT+='${prompt_newline}'
 
 	# Prompt line: virtualenv and prompt symbol.
-	PROMPT+='%(20V.%F{$prompt_pure_colors[virtualenv]}%20v%f .)'
+	PROMPT+='%(20V.%F{$prompt_pure_colors[virtualenv]}${prompt_pure_italic[virtualenv]}%20v${prompt_pure_italic[virtualenv:end]}%f .)'
 	# Prompt symbol: turns red if the previous command didn't exit with 0.
 	local prompt_indicator='%(?.%F{$prompt_pure_colors[prompt:success]}.%F{$prompt_pure_colors[prompt:error]})${prompt_pure_state[prompt]}%f '
 	PROMPT+=$prompt_indicator
