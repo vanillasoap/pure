@@ -122,6 +122,16 @@ You can change the symbol shown before the Node.js version (default `⬢`) with:
 
 `zstyle :prompt:pure:environment:node_version symbol ⬡`
 
+The Git branch, virtualenv and `user@host` have no symbol by default. You can add one, for example a Nerd Font icon:
+
+```sh
+zstyle :prompt:pure:git:branch symbol ' '
+zstyle :prompt:pure:environment:virtualenv symbol ' '
+zstyle :prompt:pure:host symbol '󰒋 '
+```
+
+Use single-width icons, since zsh counts each one as one column when it places the cursor.
+
 `nix-shell` integration adds the shell name to the prompt when used from within a nix shell. It is enabled by default, you can disable it with:
 
 `zstyle :prompt:pure:environment:nix-shell show no`
