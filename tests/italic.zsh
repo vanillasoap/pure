@@ -42,6 +42,14 @@ main() {
 	assert_contains "$expanded" "${italic}merge${upright}" "git action should be italic when enabled" || return
 	assert_contains "$expanded" "${italic}venv${upright}" "virtualenv should be italic when enabled" || return
 
+	expanded=$(expand_prompt 'setopt nounset; psvar[14]=main; psvar[16]=merge; psvar[20]=venv' 2>&1)
+	assert_contains "$expanded" 'main' "prompt should expand with nounset when italic is off" || return
+	if [[ $expanded == *'parameter not set'* ]]; then
+		print -u2 -- "Assertion failed: prompt should not reference unset parameters"
+		print -u2 -- "Actual: $expanded"
+		return 1
+	fi
+
 	print -- "italic tests passed"
 }
 

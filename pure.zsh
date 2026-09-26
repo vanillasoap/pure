@@ -167,9 +167,12 @@ prompt_pure_set_colors() {
 	done
 
 	# Italic start and end sequences per prompt part, empty unless enabled.
-	# Zsh has no prompt escape for italic, so use the terminal codes.
+	# Zsh has no prompt escape for italic, so use the terminal codes. Every
+	# key is set so PROMPT still expands when NO_UNSET is on.
 	typeset -gA prompt_pure_italic=()
 	for key in path git:branch git:action virtualenv; do
+		prompt_pure_italic[$key]=
+		prompt_pure_italic[${key}:end]=
 		zstyle -t ":prompt:pure:$key" italic || continue
 		prompt_pure_italic[$key]=$'%{\e[3m%}'
 		prompt_pure_italic[${key}:end]=$'%{\e[23m%}'
@@ -817,9 +820,8 @@ prompt_pure_async_refresh() {
 		zstyle -t ":prompt:pure:git:dirty" detailed
 		local detailed_dirty=$((? == 0))
 		async_job "prompt_pure" prompt_pure_async_git_dirty ${PURE_GIT_UNTRACKED_DIRTY:-1} $detailed_dirty || return
+		async_job "prompt_pure" prompt_pure_async_git_conflicts || return
 	fi
-
-	async_job "prompt_pure" prompt_pure_async_git_conflicts || return
 
 	# If stash is enabled, tell async worker to count stashes
 	if zstyle -t ":prompt:pure:git:stash" show; then
