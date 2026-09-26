@@ -239,9 +239,13 @@ prompt_pure_preprompt_render() {
 	# Update psvar values. PROMPT uses %(NV.true.false) to conditionally
 	# render each part. See prompt_pure_setup for the PROMPT template.
 	#
-	# psvar[12]: Suspended jobs symbol.
+	# psvar[12]: Suspended jobs symbol, with count when enabled.
 	psvar[12]=
-	((${(M)#jobstates:#suspended:*} != 0)) && psvar[12]=${PURE_SUSPENDED_JOBS_SYMBOL-✦}
+	local suspended_jobs=${(M)#jobstates:#suspended:*}
+	if (( suspended_jobs )) && [[ -n ${PURE_SUSPENDED_JOBS_SYMBOL-✦} ]]; then
+		psvar[12]=${PURE_SUSPENDED_JOBS_SYMBOL-✦}
+		zstyle -t ':prompt:pure:suspended_jobs' count && psvar[12]+=$suspended_jobs
+	fi
 
 	# psvar[13]: Username flag (set once in prompt_pure_state_setup).
 
@@ -257,9 +261,12 @@ prompt_pure_preprompt_render() {
 	# psvar[17]: Git arrows (push/pull).
 	psvar[17]=${prompt_pure_git_arrows}
 
-	# psvar[18]: Git stash symbol.
+	# psvar[18]: Git stash symbol, with count when enabled.
 	psvar[18]=
-	[[ -n $prompt_pure_git_stash ]] && psvar[18]=${PURE_GIT_STASH_SYMBOL-≡}
+	if [[ -n $prompt_pure_git_stash && -n ${PURE_GIT_STASH_SYMBOL-≡} ]]; then
+		psvar[18]=${PURE_GIT_STASH_SYMBOL-≡}
+		zstyle -t ':prompt:pure:git:stash' count && psvar[18]+=$prompt_pure_git_stash
+	fi
 
 	# psvar[19]: Command execution time.
 	psvar[19]=${prompt_pure_cmd_exec_time}
@@ -791,12 +798,23 @@ prompt_pure_async_refresh() {
 	fi
 }
 
+# Sets REPLY to the arrows for commits ahead (left) and behind (right) the
+# upstream, with counts when enabled. A diverged branch shows the diverged
+# symbol instead, when one is set.
 prompt_pure_check_git_arrows() {
 	setopt localoptions noshwordsplit
-	local arrows left=${1:-0} right=${2:-0}
+	local arrows left=${1:-0} right=${2:-0} diverged
 
-	(( right > 0 )) && arrows+=${PURE_GIT_DOWN_ARROW:-⇣}
-	(( left > 0 )) && arrows+=${PURE_GIT_UP_ARROW:-⇡}
+	if (( left > 0 && right > 0 )) && zstyle -s ':prompt:pure:git:diverged' symbol diverged && [[ -n $diverged ]]; then
+		typeset -g REPLY=$diverged
+		return
+	fi
+
+	local show_count=0
+	zstyle -t ':prompt:pure:git:arrow' count && show_count=1
+
+	(( right > 0 )) && arrows+=${PURE_GIT_DOWN_ARROW:-⇣}${${show_count:#0}:+$right}
+	(( left > 0 )) && arrows+=${PURE_GIT_UP_ARROW:-⇡}${${show_count:#0}:+$left}
 
 	[[ -n $arrows ]] || return
 	typeset -g REPLY=$arrows

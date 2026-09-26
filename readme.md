@@ -98,6 +98,18 @@ Showing git stash status as part of the prompt is not activated by default. To a
 
 `zstyle :prompt:pure:git:stash show yes`
 
+Counts can be added to the Git arrows (`⇣2⇡3`), the stash symbol (`≡3`) and the suspended jobs symbol (`✦2`). They are not enabled by default. You can enable them one at a time, or all at once with `':prompt:pure:*'`:
+
+```sh
+zstyle :prompt:pure:git:arrow count yes
+zstyle :prompt:pure:git:stash count yes
+zstyle :prompt:pure:suspended_jobs count yes
+```
+
+When a branch is both ahead of and behind its upstream, you can show a single symbol instead of both arrows:
+
+`zstyle :prompt:pure:git:diverged symbol '<->'`
+
 You can set Pure to only `git fetch` the upstream branch of the current local branch. In some cases, this can result in faster updates for Git arrows, but for most users, it's better to leave this setting disabled. You can enable it with:
 
 `zstyle :prompt:pure:git:fetch only_upstream yes`
