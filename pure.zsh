@@ -361,7 +361,10 @@ prompt_pure_precmd() {
 		fi
 	fi
 
-	# Make sure VIM prompt is reset.
+	# Use the error symbol in insert mode after a failed command, and make
+	# sure VIM prompt is reset.
+	prompt_pure_state[insert_prompt]=${PURE_PROMPT_SYMBOL:-❯}
+	(( exit_status )) && prompt_pure_state[insert_prompt]=${PURE_PROMPT_ERROR_SYMBOL:-${PURE_PROMPT_SYMBOL:-❯}}
 	prompt_pure_reset_prompt_symbol
 
 	# Print the preprompt.
@@ -986,12 +989,12 @@ prompt_pure_reset_prompt() {
 }
 
 prompt_pure_reset_prompt_symbol() {
-	prompt_pure_state[prompt]=${PURE_PROMPT_SYMBOL:-❯}
+	prompt_pure_state[prompt]=${prompt_pure_state[insert_prompt]:-${PURE_PROMPT_SYMBOL:-❯}}
 }
 
 prompt_pure_update_vim_prompt_widget() {
 	setopt localoptions noshwordsplit
-	prompt_pure_state[prompt]=${${${KEYMAP/vicmd/${PURE_PROMPT_VICMD_SYMBOL:-❮}}/visual/${PURE_PROMPT_VICMD_SYMBOL:-❮}}/(main|viins)/${PURE_PROMPT_SYMBOL:-❯}}
+	prompt_pure_state[prompt]=${${${KEYMAP/vicmd/${PURE_PROMPT_VICMD_SYMBOL:-❮}}/visual/${PURE_PROMPT_VICMD_SYMBOL:-❮}}/(main|viins)/${prompt_pure_state[insert_prompt]:-${PURE_PROMPT_SYMBOL:-❯}}}
 
 	prompt_pure_reset_prompt
 }
@@ -1169,7 +1172,7 @@ prompt_pure_preview() {
 	print -P "%F{$c[virtualenv]}venv%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
 	print
 	print -P "%F{$c[result:fail]}${fail_sample} 1%f"
-	print -P "%F{$c[prompt:error]}${PURE_PROMPT_SYMBOL:-❯}%f  prompt after error"
+	print -P "%F{$c[prompt:error]}${PURE_PROMPT_ERROR_SYMBOL:-${PURE_PROMPT_SYMBOL:-❯}}%f  prompt after error"
 	print; print
 	print -P "%F{$c[git:branch:cached]}main%f  branch color when data is cached"
 	print; print

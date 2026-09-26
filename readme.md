@@ -86,6 +86,7 @@ prompt pure
 | **`PURE_GIT_DELAY_DIRTY_CHECK`** | Time in seconds to delay git dirty checking when `git status` takes > 5 seconds.               | `1800` seconds |
 | **`PURE_PROMPT_SYMBOL`**         | Defines the prompt symbol.                                                                     | `❯`            |
 | **`PURE_PROMPT_VICMD_SYMBOL`**   | Defines the prompt symbol used when the `vicmd` keymap is active (VI-mode).                    | `❮`            |
+| **`PURE_PROMPT_ERROR_SYMBOL`**   | Defines the prompt symbol used after a failed command.                                         | `PURE_PROMPT_SYMBOL` |
 | **`PURE_SUSPENDED_JOBS_SYMBOL`** | Defines the symbol that indicates that jobs are running in the background. Set to empty to disable. | `✦`            |
 | **`PURE_GIT_DOWN_ARROW`**        | Defines the git down arrow symbol.                                                             | `⇣`            |
 | **`PURE_GIT_UP_ARROW`**          | Defines the git up arrow symbol.                                                               | `⇡`            |
@@ -218,7 +219,7 @@ Colors can be changed by using [`zstyle`](http://zsh.sourceforge.net/Doc/Release
 - `host` (242) - The hostname when on a remote machine.
 - `node_version` (green) - The current major Node.js version in directories with `package.json`.
 - `path` (blue) - The current path, for example, `PWD`.
-- `prompt:error` (red) - The `PURE_PROMPT_SYMBOL` when the previous command has *failed*.
+- `prompt:error` (red) - The `PURE_PROMPT_SYMBOL` (or `PURE_PROMPT_ERROR_SYMBOL`) when the previous command has *failed*.
 - `prompt:success` (magenta) - The `PURE_PROMPT_SYMBOL` when the previous command has *succeeded*.
 - `prompt:continuation` (242) - The color for showing the state of the parser in the continuation prompt (PS2). It's the pink part in [this screenshot](https://user-images.githubusercontent.com/147409/70068574-ebc74800-15f8-11ea-84c0-8b94a4b57ff4.png), it appears in the same spot as `virtualenv`. You could for example matching both colors so that Pure has a uniform look.
 - `result:pass` (green) - The command result when the last command succeeded.
