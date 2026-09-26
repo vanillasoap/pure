@@ -35,6 +35,21 @@ main() {
 	expanded=$(expand_prompt 'psvar[14]=main; zstyle :prompt:pure:git:branch symbol "100%"')
 	assert_contains "$expanded" '100%main' "a percent sign in a symbol should show as is" || return
 
+	# Prompt punctuation must stay literal inside conditional segments.
+	local symbol
+	for symbol in '?. ' ':) ' '%F{red} ' '$(echo literal) '; do
+		expanded=$(expand_prompt "psvar[14]=main; psvar[20]=venv; psvar[13]=1; zstyle :prompt:pure:git:branch symbol ${(q)symbol}; zstyle :prompt:pure:environment:virtualenv symbol ${(q)symbol}; zstyle :prompt:pure:host symbol ${(q)symbol}")
+		assert_contains "$expanded" "${symbol}main" "branch symbols should stay literal" || return
+		assert_contains "$expanded" "${symbol}venv" "virtualenv symbols should stay literal" || return
+		assert_contains "$expanded" "${symbol}"$'\e[39m\e[38;5;242m'"${(%):-%n}" "host symbols should stay literal" || return
+	done
+
+	expanded=$(expand_prompt 'zstyle :prompt:pure:git:branch symbol "?. "; zstyle :prompt:pure:environment:virtualenv symbol ":) "; psvar[14]=; psvar[20]=')
+	if [[ $expanded == *'?. '* || $expanded == *':) '* ]]; then
+		print -u2 -- "Assertion failed: symbols should stay hidden when their segment is empty"
+		return 1
+	fi
+
 	print -- "symbols tests passed"
 }
 

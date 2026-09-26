@@ -178,17 +178,13 @@ prompt_pure_set_colors() {
 		prompt_pure_italic[${key}:end]=$'%{\e[23m%}'
 	done
 
-	# Symbols shown before a prompt part, escaped for prompt expansion.
-	local REPLY
-	typeset -gA prompt_pure_part_symbols=()
-	for key in host git:branch environment:virtualenv; do
+	# psvar keeps symbol text literal, including %, . and ) inside prompt conditionals.
+	local REPLY slot
+	local -A symbol_slots=(host 25 git:branch 26 environment:virtualenv 27)
+	for key slot in "${(@kv)symbol_slots}"; do
 		prompt_pure_symbol $key
-		prompt_pure_part_symbols[$key]=${REPLY//\%/%%}
+		psvar[$slot]=$REPLY
 	done
-	# The host symbol comes before the username, in the host color.
-	if [[ -n $prompt_pure_part_symbols[host] ]]; then
-		prompt_pure_part_symbols[host]="%F{$prompt_pure_colors[host]}$prompt_pure_part_symbols[host]%f"
-	fi
 
 	prompt_pure_set_path_separator
 
@@ -316,19 +312,7 @@ prompt_pure_preprompt_render() {
 	# Build a fingerprint from all dynamic prompt components to detect changes
 	# without expanding PROMPT (which forks a subshell when dimmed path is on).
 	local -a prompt_fingerprint_parts=(
-		"${psvar[12]}"
-		"${psvar[13]}"
-		"${psvar[14]}"
-		"${psvar[15]}"
-		"${psvar[16]}"
-		"${psvar[17]}"
-		"${psvar[18]}"
-		"${psvar[19]}"
-		"${psvar[20]}"
-		"${psvar[21]}"
-		"${psvar[22]}"
-		"${psvar[23]}"
-		"${psvar[24]}"
+		"${(@)psvar[12,27]}"
 		"${prompt_pure_state[prompt]}"
 		"${prompt_pure_git_branch_color}"
 		"${PWD}"
@@ -453,7 +437,7 @@ prompt_pure_async_vcs_info() {
 	# to be used or configured as the user pleases.
 	zstyle ':vcs_info:*' enable git
 	zstyle ':vcs_info:*' use-simple true
-	# Only export four message variables from `vcs_info`.
+	# Export three message variables from `vcs_info`.
 	zstyle ':vcs_info:*' max-exports 3
 	# Export branch (%b), Git toplevel (%R), action (rebase/cherry-pick) (%a)
 	zstyle ':vcs_info:git*' formats '%b' '%R' '%a'
@@ -463,7 +447,8 @@ prompt_pure_async_vcs_info() {
 
 	local -A info
 	info[pwd]=$PWD
-	info[branch]=${vcs_info_msg_0_//\%/%%}
+	# %14v renders this literally; escaping % here would show it twice.
+	info[branch]=$vcs_info_msg_0_
 	info[top]=$vcs_info_msg_1_
 	info[action]=$vcs_info_msg_2_
 	info[detached]=
@@ -849,7 +834,6 @@ prompt_pure_check_git_arrows() {
 	(( right > 0 )) && arrows+=${PURE_GIT_DOWN_ARROW:-⇣}${${show_count:#0}:+$right}
 	(( left > 0 )) && arrows+=${PURE_GIT_UP_ARROW:-⇡}${${show_count:#0}:+$left}
 
-	[[ -n $arrows ]] || return
 	typeset -g REPLY=$arrows
 }
 
@@ -1045,7 +1029,11 @@ prompt_pure_reset_prompt_symbol() {
 
 prompt_pure_update_vim_prompt_widget() {
 	setopt localoptions noshwordsplit
-	prompt_pure_state[prompt]=${${${KEYMAP/vicmd/${PURE_PROMPT_VICMD_SYMBOL:-❮}}/visual/${PURE_PROMPT_VICMD_SYMBOL:-❮}}/(main|viins)/${prompt_pure_state[insert_prompt]:-${PURE_PROMPT_SYMBOL:-❯}}}
+	case $KEYMAP in
+		vicmd|visual) prompt_pure_state[prompt]=${PURE_PROMPT_VICMD_SYMBOL:-❮} ;;
+		main|viins) prompt_pure_reset_prompt_symbol ;;
+		*) return 0 ;;
+	esac
 
 	prompt_pure_reset_prompt
 }
@@ -1215,12 +1203,12 @@ prompt_pure_system_report() {
 
 prompt_pure_preview() {
 	setopt localoptions noshwordsplit
+	local -a psvar=("${psvar[@]}")
 
 	prompt_pure_set_colors
 
 	local -A c=("${(@kv)prompt_pure_colors}")
 	local -A i=("${(@kv)prompt_pure_italic}")
-	local -A s=("${(@kv)prompt_pure_part_symbols}")
 	local path_sample="%F{$c[path]}${i[path]-}~/dev/pure${i[path:end]-}%f"
 	if zstyle -t ':prompt:pure:path:separator' dim; then
 		path_sample=$(prompt_pure_render_dimmed_path '~/dev/pure')
@@ -1231,24 +1219,32 @@ prompt_pure_preview() {
 		host_sample="%F{$c[host]}@heartofgold%f"
 	fi
 
-	local REPLY node_symbol pass_sample fail_sample conflicts_sample
-	prompt_pure_symbol environment:node_version; node_symbol=${REPLY//\%/%%}
-	prompt_pure_symbol result:pass; pass_sample=$REPLY
-	prompt_pure_symbol result:fail; fail_sample=$REPLY
-	prompt_pure_symbol git:conflicts; conflicts_sample=$REPLY
+	local REPLY
+	prompt_pure_symbol environment:node_version; psvar[21]=${REPLY}22
+	prompt_pure_symbol result:pass; psvar[24]=$REPLY
+	prompt_pure_check_git_arrows 3 2; psvar[17]=$REPLY
+	psvar[12]=${PURE_SUSPENDED_JOBS_SYMBOL-✦}
+	[[ -n $psvar[12] ]] && zstyle -t ':prompt:pure:suspended_jobs' count && psvar[12]+=2
+	psvar[18]=${PURE_GIT_STASH_SYMBOL-≡}
+	[[ -n $psvar[18] ]] && zstyle -t ':prompt:pure:git:stash' count && psvar[18]+=3
+
+	local -A prompt_pure_vcs_info=(action rebase-i)
+	local prompt_pure_git_conflicts=1
+	prompt_pure_set_git_state
 
 	# Sample preprompt with all components visible.
-	print -P "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}${PURE_SUSPENDED_JOBS_SYMBOL-✦}%f ${s[host]-}%F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}${s[git:branch]-}${i[git:branch]-}main${i[git:branch:end]-}%f%F{$c[git:dirty]}*%f %F{$c[git:action]}${i[git:action]-}${conflicts_sample} rebase-i${i[git:action:end]-}%f %F{$c[git:arrow]}${PURE_GIT_DOWN_ARROW:-⇣}${PURE_GIT_UP_ARROW:-⇡}%f %F{$c[git:stash]}${PURE_GIT_STASH_SYMBOL-≡}%f %F{$c[node_version]}${node_symbol}22%f %F{$c[result:pass]}${pass_sample}%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
-	print -P "%F{$c[virtualenv]}${s[environment:virtualenv]-}${i[virtualenv]-}venv${i[virtualenv:end]-}%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
+	print -rP -- "%F{$c[custom:prefix]}prefix%f %F{$c[suspended_jobs]}%12v%f %F{$c[host]}%25v%f%F{$c[user]}zaphod%f${host_sample} ${path_sample} %F{$c[git:branch]}%26v${i[git:branch]-}main${i[git:branch:end]-}%f%F{$c[git:dirty]}*%f %F{$c[git:action]}${i[git:action]-}%16v${i[git:action:end]-}%f %F{$c[git:arrow]}%17v%f %F{$c[git:stash]}%18v%f %F{$c[node_version]}%21v%f %F{$c[result:pass]}%24v%f %F{$c[execution_time]}42s%f %F{$c[custom:suffix]}suffix%f"
+	print -rP -- "%F{$c[virtualenv]}%27v${i[virtualenv]-}venv${i[virtualenv:end]-}%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f"
 	print
-	print -P "%F{$c[result:fail]}${fail_sample} 1%f"
-	print -P "%F{$c[prompt:error]}${PURE_PROMPT_ERROR_SYMBOL:-${PURE_PROMPT_SYMBOL:-❯}}%f  prompt after error"
+	prompt_pure_symbol result:fail; psvar[24]=$REPLY
+	print -rP -- "%F{$c[result:fail]}%24v 1%f"
+	print -rP -- "%F{$c[prompt:error]}${PURE_PROMPT_ERROR_SYMBOL:-${PURE_PROMPT_SYMBOL:-❯}}%f  prompt after error"
 	print; print
-	print -P "%F{$c[git:branch:cached]}main%f  branch color when data is cached"
+	print -rP -- "%F{$c[git:branch:cached]}main%f  branch color when data is cached"
 	print; print
-	print -P "%F{$c[user:root]}root%f${host_sample}  root user"
+	print -rP -- "%F{$c[user:root]}root%f${host_sample}  root user"
 	print; print
-	print -P "%F{$c[prompt:continuation]}… if%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f  continuation prompt"
+	print -rP -- "%F{$c[prompt:continuation]}… if%f %F{$c[prompt:success]}${PURE_PROMPT_SYMBOL:-❯}%f  continuation prompt"
 }
 
 prompt_pure_setup() {
@@ -1280,7 +1276,7 @@ prompt_pure_setup() {
 	autoload -Uz +X add-zle-hook-widget 2>/dev/null
 
 	# Set the colors.
-	typeset -gA prompt_pure_colors_default prompt_pure_colors prompt_pure_italic prompt_pure_part_symbols
+	typeset -gA prompt_pure_colors_default prompt_pure_colors prompt_pure_italic
 	prompt_pure_colors_default=(
 		custom:prefix        242
 		custom:suffix        242
@@ -1326,7 +1322,7 @@ prompt_pure_setup() {
 	typeset -g prompt_pure_git_branch_color=$prompt_pure_colors[git:branch]
 
 	# Construct PROMPT once, both preprompt and prompt line. Kept
-	# dynamic via variables and psvar[12-24], updated each render
+	# dynamic via variables and psvar[12-27], updated each render
 	# in prompt_pure_preprompt_render. Numbering starts at 12 for
 	# legacy reasons (Pure originally used psvar[12] for virtualenv)
 	# and to avoid collisions with low psvar indices which users
@@ -1345,6 +1341,9 @@ prompt_pure_setup() {
 	#   psvar[22] = custom prefix (set by prompt_pure_precustom)
 	#   psvar[23] = custom suffix (set by prompt_pure_precustom)
 	#   psvar[24] = last command result (e.g. [FAIL] 1), set in precmd
+	#   psvar[25] = host symbol, set with styles in precmd
+	#   psvar[26] = Git branch symbol, set with styles in precmd
+	#   psvar[27] = virtualenv symbol, set with styles in precmd
 	#
 	# Example output:
 	#   prefix ✦ user@host ~/Code/pure main* rebase ⇣⇡ ≡ ⬢22 [PASS] 3s suffix
@@ -1357,10 +1356,10 @@ prompt_pure_setup() {
 	if (( prompt_pure_state[show_host] )); then
 		hostname_part='%F{$prompt_pure_colors[host]}@%m%f'
 	fi
-	PROMPT+='%(13V.${prompt_pure_part_symbols[host]}%F{$prompt_pure_colors['"${prompt_pure_state[user_color]:-user}"']}%n%f'"${hostname_part}"' .)'
+	PROMPT+='%(13V.%(25V.%F{$prompt_pure_colors[host]}%25v%f.)%F{$prompt_pure_colors['"${prompt_pure_state[user_color]:-user}"']}%n%f'"${hostname_part}"' .)'
 	prompt_pure_set_path_separator
 	PROMPT+='${${prompt_pure_path_separator_dimmed:+$(prompt_pure_render_dimmed_path)}:-${prompt_pure_path_segment}}'
-	PROMPT+='%(14V. %F{${prompt_pure_git_branch_color}}${prompt_pure_part_symbols[git:branch]}${prompt_pure_italic[git:branch]}%14v${prompt_pure_italic[git:branch:end]}%(15V.%F{$prompt_pure_colors[git:dirty]}%15v.)%f.)'
+	PROMPT+='%(14V. %F{${prompt_pure_git_branch_color}}%26v${prompt_pure_italic[git:branch]}%14v${prompt_pure_italic[git:branch:end]}%(15V.%F{$prompt_pure_colors[git:dirty]}%15v.)%f.)'
 	PROMPT+='%(16V. %F{$prompt_pure_colors[git:action]}${prompt_pure_italic[git:action]}%16v${prompt_pure_italic[git:action:end]}%f.)'
 	PROMPT+='%(17V. %F{$prompt_pure_colors[git:arrow]}%17v%f.)'
 	PROMPT+='%(18V. %F{$prompt_pure_colors[git:stash]}%18v%f.)'
@@ -1374,7 +1373,7 @@ prompt_pure_setup() {
 	PROMPT+='${prompt_newline}'
 
 	# Prompt line: virtualenv and prompt symbol.
-	PROMPT+='%(20V.%F{$prompt_pure_colors[virtualenv]}${prompt_pure_part_symbols[environment:virtualenv]}${prompt_pure_italic[virtualenv]}%20v${prompt_pure_italic[virtualenv:end]}%f .)'
+	PROMPT+='%(20V.%F{$prompt_pure_colors[virtualenv]}%27v${prompt_pure_italic[virtualenv]}%20v${prompt_pure_italic[virtualenv:end]}%f .)'
 	# Prompt symbol: turns red if the previous command didn't exit with 0.
 	local prompt_indicator='%(?.%F{$prompt_pure_colors[prompt:success]}.%F{$prompt_pure_colors[prompt:error]})${prompt_pure_state[prompt]}%f '
 	PROMPT+=$prompt_indicator

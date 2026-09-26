@@ -54,6 +54,13 @@ main() {
 
 	assert_equal 1 $prompt_pure_reset_prompt_count "prompt fingerprint should distinguish separators inside custom prompt parts" || return
 
+	zstyle ':prompt:pure:git:branch' symbol '-> '
+	prompt_pure_set_colors
+	prompt_pure_preprompt_render
+	assert_equal 2 $prompt_pure_reset_prompt_count "changed segment symbols should trigger a redraw" || return
+	prompt_pure_preprompt_render
+	assert_equal 2 $prompt_pure_reset_prompt_count "unchanged prompt should not redraw" || return
+
 	print -- "prompt-fingerprint tests passed"
 }
 

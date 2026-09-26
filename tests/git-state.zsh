@@ -58,6 +58,15 @@ read_vcs_info
 assert_equal 1 "$info[detached]" "detached checkout should be detected"
 git_quiet checkout -
 
+# Branch names are rendered through psvar, which does not expand prompt escapes.
+local original_branch=$(command git symbolic-ref --short HEAD)
+git_quiet checkout -b 'feature/100%done'
+read_vcs_info
+assert_equal 'feature/100%done' "$info[branch]" "branch names should retain literal percent signs"
+psvar[14]=$info[branch]
+assert_equal 'feature/100%done' "${(%):-%14v}" "the branch segment should render the name unchanged"
+git_quiet checkout "$original_branch"
+
 # ── Conflict detection ──
 
 check_conflicts

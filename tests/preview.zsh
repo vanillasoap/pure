@@ -77,6 +77,46 @@ main() {
 		return 1
 	fi
 
+	PURE_GIT_DOWN_ARROW='<-'
+	PURE_GIT_UP_ARROW='->'
+	zstyle ':prompt:pure:git:arrow' count yes
+	output=$(prompt_pure_preview 2>&1)
+	[[ $output == *'<-2->3'* ]] || {
+		print -u2 -- "Preview should show configured arrows with counts."
+		return 1
+	}
+	zstyle ':prompt:pure:git:diverged' symbol '<->'
+	output=$(prompt_pure_preview 2>&1)
+	[[ $output == *'<->'* && $output != *'<-2->3'* ]] || {
+		print -u2 -- "Preview should use the divergence symbol instead of arrows."
+		return 1
+	}
+
+	zstyle ':prompt:pure:git:branch' symbol '?. '
+	zstyle ':prompt:pure:result:pass' symbol '[OK]%'
+	zstyle ':prompt:pure:result:fail' symbol '[KO]%'
+	zstyle ':prompt:pure:git:conflicts' symbol '<?>'
+	zstyle ':prompt:pure:git:action:rebase-i' symbol '->'
+	zstyle ':prompt:pure:git:stash' count yes
+	zstyle ':prompt:pure:suspended_jobs' count yes
+	PURE_PROMPT_SYMBOL='=>'
+	PURE_PROMPT_ERROR_SYMBOL='!='
+	output=$(prompt_pure_preview 2>&1)
+	for component in '?. main' '[OK]%' '[KO]% 1' '<?> ->' '≡3' '✦2' '=>' '!='; do
+		[[ $output == *"$component"* ]] || {
+			print -u2 -- "Missing configured component in preview: $component"
+			return 1
+		}
+	done
+
+	psvar[14]=current-branch
+	psvar[24]=current-result
+	psvar[26]=current-symbol
+	prompt_pure_preview >/dev/null
+	assert_equal current-branch "$psvar[14]" "preview should preserve the live branch" || return
+	assert_equal current-result "$psvar[24]" "preview should preserve the live result" || return
+	assert_equal current-symbol "$psvar[26]" "preview should preserve the live symbol" || return
+
 	print "preview tests passed."
 }
 

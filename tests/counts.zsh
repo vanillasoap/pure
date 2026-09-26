@@ -26,6 +26,9 @@ main() {
 	assert_equal '⇡1' "$REPLY" "only ahead should show one count" || return
 	arrows 0 0
 	assert_empty "$REPLY" "up to date should show nothing" || return
+	REPLY=stale
+	prompt_pure_check_git_arrows 0 0
+	assert_empty "$REPLY" "up to date should clear any previous arrows" || return
 
 	zstyle ':prompt:pure:git:diverged' symbol '<->'
 	arrows 3 2
